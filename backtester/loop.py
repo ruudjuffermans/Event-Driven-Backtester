@@ -3,34 +3,25 @@ import pprint
 import queue
 import time
 
-from Event import MarketEvent, SignalEvent, OrderEvent, FillEvent
+from .events import MarketEvent, SignalEvent, OrderEvent, FillEvent
+from .generator import CSVGenerator
 
 
-class Backtest:
+class Loop:
     def __init__(
         self,
-        data_dir,
-        symbol_list,
-        indicator_list,
-        initial_capital,
-        heartbeat,
-        window,
         data_handler,
         execution_handler,
         portfolio,
         strategy,
+        heartbeat,
     ):
-        self.symbol_list = symbol_list
-        self.indicator_list = indicator_list
-        self.window = window
-        self.data_dir = data_dir
-        self.initial_capital = initial_capital
         self.heartbeat = heartbeat
 
-        self.data_handler_cls = data_handler
-        self.execution_handler_cls = execution_handler
-        self.portfolio_cls = portfolio
-        self.strategy_cls = strategy
+        self.data_handler = data_handler
+        self.execution_handler = execution_handler
+        self.portfolio = portfolio
+        self.strategy = strategy
 
         self.events = queue.Queue()
         self.signals = 0
@@ -39,69 +30,34 @@ class Backtest:
         self.num_strats = 1
 
         self._set_datahandler()
-        self._set_indicators()
         self._set_portfolio()
         self._set_execution_handler()
         self._set_strategy()
 
     def _set_datahandler(self):
-        """
-        Generates the trading instance objects from
-        their class types.
-        """
-
-        print("Creating DataHandler, Strategy, Portfolio and ExecutionHandler")
-        if self.data_handler_cls.__name__ == "CSVDataHandler":
-            self.data_handler = self.data_handler_cls(self.events, self.symbol_list)
-
-        # TODO --> Implement a better selection mode
-        elif self.data_handler_cls.__name__ == "YahooDataHandler":
-            self.data_handler = self.data_handler_cls(
-                self.events, self.symbol_list, self.window
-            )
-        elif self.data_handler_cls.__name__ == "BinanceDataHandler":
-            self.data_handler = self.data_handler_cls(
-                self.events, self.symbol_list, self.window
-            )
+        if isinstance(self.data_handler, CSVGenerator):
+            self.data_handler.register(self.events)
         else:
             raise NotImplementedError("Data feed not implemented")
 
-    def _set_indicators(self):
-        self.indicators = []
-        for indicator in self.indicator_list:
-            self.indicators.append(
-                indicator(bars=self.data_handler, events=self.events)
-            )
-
     def _set_strategy(self):
-        self.strategy = self.strategy_cls(
-            self.data_handler, self.indicators, self.events
-        )
+        self.strategy.register(self.data_handler, self.events)
 
     def _set_portfolio(self):
-        self.portfolio = self.portfolio_cls(
-            self.data_handler, self.events, self.window, self.initial_capital
-        )
+        self.portfolio.register(self.data_handler, self.events)
 
     def _set_execution_handler(self):
-        self.execution_handler = self.execution_handler_cls(self.events)
+        self.execution_handler.register(self.events)
 
     def _run_backtest(self):
         """
         Executes the backtest.
         """
-        e = 0
-        i = 0
         while True:
-            i += 1
-            print("i", i)
-            # Update the market bars
             if self.data_handler.continue_backtest:
                 self.data_handler.update_bars()
             else:
                 break
-
-            # Handle the events
             while True:
                 try:
                     event = self.events.get(False)
@@ -109,11 +65,7 @@ class Backtest:
                     break
                 else:
                     if event is not None:
-                        e += 1
-                        print("e", e)
                         if isinstance(event, MarketEvent):
-                            for indicator in self.indicators:
-                                indicator.calculate()
                             self.strategy.calculate(event)
                             self.portfolio.update_timeindex(event)
 
@@ -148,7 +100,7 @@ class Backtest:
         print("Orders: %s" % self.orders)
         print("Fills: %s" % self.fills)
 
-    def simulate_trading(self):
+    def start(self):
         """
         Simulates the backtest and outputs portfolio performance.
         """

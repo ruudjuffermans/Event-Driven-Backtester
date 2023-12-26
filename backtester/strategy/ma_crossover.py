@@ -1,52 +1,23 @@
-from Strategy import Strategy
-from Event import MarketEvent
+from .strategy import Strategy
+from ..events import MarketEvent
 
 
 class MACrossOverStrategy(Strategy):
-    """
-    Carries out a basic Moving Average Crossover strategy with a
-    short/long simple weighted moving average. Default short/long
-    windows are 100/400 periods respectively.
-    """
-
-    def __init__(self, bars, indicators, events, short_window=100, long_window=400):
-        """
-        Initialises the Moving Average Cross Strategy.
-        Parameters:
-        bars - The DataHandler object that provides bar information
-        events - The Event Queue object.
-        short_window - The short moving average lookback.
-        long_window - The long moving average lookback.
-        """
-
-        self.bars = bars
-        self.indicators = indicators
-        self.symbol_list = self.bars.symbol_list
-        self.events = events
+    def __init__(self, short_window=100, long_window=400):
         self.short_window = short_window
         self.long_window = long_window
 
-        # Set to True if a symbol is in the market
+    def register(self, bars, events):
+        self.bars = bars
+        self.events = events
+        self.symbol_list = self.bars.symbol_list
         self.bought = self._calculate_initial_bought()
 
     def _calculate_initial_bought(self):
-        """
-        Adds keys to the bought dictionary for all symbols
-        and sets them to 'OUT'.
-        """
-
         bought = {symbol: "OUT" for symbol in self.symbol_list}
         return bought
 
     def calculate(self, event):
-        """
-        Generates a new set of signals based on the MAC
-        SMA with the short window crossing the long window
-        meaning a long entry and vice versa for a short entry.
-        Parameters
-        event - A MarketEvent object.
-        """
-
         if isinstance(event, MarketEvent):
             for symbol in self.symbol_list:
                 bars = self.bars.get_latest_bars_values(
@@ -55,9 +26,7 @@ class MACrossOverStrategy(Strategy):
                 bar_datetime = self.bars.get_latest_bar_datetime(symbol)
 
                 if bars is not None and bars != []:
-                    for indicator in self.indicators:
-                        if indicator.symbol == symbol:
-                            print(indicator.data[bar_datetime])
+                    print(bar_datetime)
 
                     # long_sma = np.mean( bars[-self.long_window:] )
 
